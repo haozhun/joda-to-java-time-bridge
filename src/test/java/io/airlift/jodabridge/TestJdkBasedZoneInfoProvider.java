@@ -19,15 +19,16 @@ import org.joda.time.DateTimeZone;
 import org.joda.time.IllegalInstantException;
 import org.joda.time.LocalDateTime;
 import org.joda.time.format.DateTimeFormat;
+import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.zone.ZoneRulesProvider;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.fail;
+import static org.testng.Assert.*;
 
 public class TestJdkBasedZoneInfoProvider
 {
@@ -210,7 +211,21 @@ public class TestJdkBasedZoneInfoProvider
     {
         DateTimeZone.forID("-13:00");
 
-        for (String zoneId : ZoneId.getAvailableZoneIds()) {
+        long millis1900 = (java.time.LocalDateTime.of(1960, 1, 1, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000) & 0xFFFF_FFFF_0000_0000L;
+        long millis2100 = (java.time.LocalDateTime.of(2030, 1, 1, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000) & 0xFFFF_FFFF_0000_0000L;
+        long millisInterval = 0x1_0000_0000L;
+        long periods = (millis2100 - millis1900) / millisInterval;
+        System.out.println(periods);
+        System.out.println(millis1900);
+        System.out.println(millis2100);
+
+        double maxOfAvgCount = 0;
+        int maxOfMaxCount = 0;
+        int totalOfTotalCount = 0;
+        int numberOfCachedZones = 0;
+
+        //for (String zoneId : ZoneId.getAvailableZoneIds()) {
+        for (String zoneId : ZoneRulesProvider.getAvailableZoneIds()) {
             if (zoneId.startsWith("Etc/") || zoneId.startsWith("GMT") || zoneId.startsWith("SystemV/")) {
                 continue;
             }
@@ -222,12 +237,40 @@ public class TestJdkBasedZoneInfoProvider
                 continue;
             }
 
-            DateTimeZone.forID(zoneId);
+            DateTimeZone dateTimeZone = DateTimeZone.forID(zoneId);
+            if (!(dateTimeZone instanceof CachedDateTimeZone)) {
+                continue;
+            }
+            CachedDateTimeZone cachedDateTimeZone = ((CachedDateTimeZone) dateTimeZone);
+            System.out.println(String.format("%-40s", zoneId));
+            int totalCount = 0;
+            int maxCount = 0;
+            for (long i = millis1900; i < millis2100; i += millisInterval) {
+                int count = cachedDateTimeZone.createInfo2(i);
+                totalCount += count;
+                if (count > maxCount) {
+                    maxCount = count;
+                }
+            }
+            double avgCount = totalCount * 1.0 / periods;
+            System.out.println(String.format("%-40s total %d avg %.2f max %d", zoneId, totalCount, avgCount, maxCount));
+            if (avgCount > maxOfAvgCount) {
+                maxOfAvgCount = avgCount;
+            }
+            if (maxCount > maxOfMaxCount) {
+                maxOfMaxCount = maxCount;
+            }
+            totalOfTotalCount += totalCount;
+            numberOfCachedZones++;
         }
+        System.out.println(String.format("max: avg %.2f max %d", maxOfAvgCount, maxOfMaxCount));
+        System.out.println(String.format("total: total %d", totalOfTotalCount));
+        System.out.println(String.format("count: %d", numberOfCachedZones));
 
         for (int offsetHours = -13; offsetHours < 14; offsetHours++) {
             for (int offsetMinutes = 0; offsetMinutes < 60; offsetMinutes++) {
-                DateTimeZone.forOffsetHoursMinutes(offsetHours, offsetMinutes);
+                DateTimeZone dateTimeZone = DateTimeZone.forOffsetHoursMinutes(offsetHours, offsetMinutes);
+                assertFalse(dateTimeZone instanceof CachedDateTimeZone);
             }
         }
     }

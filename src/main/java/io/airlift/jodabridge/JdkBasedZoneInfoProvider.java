@@ -15,7 +15,6 @@
 package io.airlift.jodabridge;
 
 import org.joda.time.DateTimeZone;
-import org.joda.time.tz.CachedDateTimeZone;
 import org.joda.time.tz.Provider;
 
 import java.time.zone.ZoneRulesProvider;
